@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BATTLESHIP — Naval Command</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0a0e1a;
+    --navy-mid: #0d1626;
+    --navy-light: #142035;
+    --steel: #1e3a5f;
+    --ocean: #0e4d6e;
+    --cyan: #00d4ff;
+    --cyan-dim: #0099bb;
+    --gold: #f5c518;
+    --gold-dim: #c49a14;
+    --red: #ff3333;
+    --green: #00ff88;
+    --miss: #3a5a7a;
+    --hit: #ff4444;
+    --destroyed: #ff8800;
+    --ship: #2a6496;
+    --empty: #0d2a3d;
+    --text: #b0c8e0;
+    --text-bright: #e0f0ff;
+    --border: #1a3a5c;
+    --glow-cyan: 0 0 10px rgba(0,212,255,0.4);
+    --glow-gold: 0 0 10px rgba(245,197,24,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--navy);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(14,77,110,0.15) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(0,212,255,0.05) 0%, transparent 50%);
+  }
+
+  /* Animated scanlines */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ===== HEADER ===== */
+  header {
+    text-align: center;
+    padding: 18px 20px 10px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(0,30,60,0.8) 0%, transparent 100%);
+    position: relative;
+  }
+  header h1 {
+    font-family: 'Orbitron', sans-serif;
+    font-size: clamp(1.6rem, 4vw, 2.8rem);
+    font-weight: 900;
+    letter-spacing: 0.3em;
+    color: var(--cyan);
+    text-shadow: 0 0 20px rgba(0,212,255,0.6), 0 0 40px rgba(0,212,255,0.3);
+    text-transform: uppercase;
+  }
+  header .subtitle {
+    font-size: 0.65rem;
+    letter-spacing: 0.4em;
+    color: var(--gold);
+    margin-top: 4px;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+
+  /* ===== LAYOUT ===== */
+  .app {
+    display: grid;
+    grid-template-columns: 260px 1fr 260px;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+    padding: 12px;
+    max-width: 1400px;
+    margin: 0 auto;
+    min-height: calc(100vh - 80px);
+  }
+
+  /* ===== PANELS ===== */
+  .panel {
+    background: var(--navy-mid);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px;
+  }
+  .panel-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    color: var(--cyan);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ===== PHASE BAR ===== */
+  .phase-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 10px 16px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    flex-wrap: wrap;
+  }
+  .phase-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    opacity: 0.4;
+    transition: all 0.3s;
+  }
+  .phase-step.active { opacity: 1; color: var(--cyan); }
+  .phase-step.done { opacity: 0.7; color: var(--green); }
+  .phase-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.6rem;
+    font-family: 'Orbitron', sans-serif;
+  }
+  .phase-step.active .phase-num {
+    background: var(--cyan);
+    color: var(--navy);
+    box-shadow: var(--glow-cyan);
+  }
+  .phase-arrow { color: var(--border); font-size: 0.7rem; }
+
+  /* ===== LEFT PANEL ===== */
+  .left-panel { grid-column: 1; }
+
+  /* Turn indicator */
+  .turn-indicator {
+    text-align: center;
+    padding: 10px;
+    background: var(--navy-light);
+    border-radius: 3px;
+    margin-bottom: 12px;
+    border: 1px solid var(--steel);
+  }
+  .turn-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.3em;
+    color: var(--text);
+    opacity: 0.6;
+  }
+  .turn-player {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-top: 2px;
+  }
+  .turn-player.p1 { color: var(--cyan); text-shadow: var(--glow-cyan); }
+  .turn-player.p2 { color: var(--gold); text-shadow: var(--glow-gold); }
+
+  /* Ship selector */
+  .ship-list { display: flex; flex-direction: column; gap: 6px; }
+  .ship-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .ship-item:hover:not(.placed) { border-color: var(--cyan-dim); }
+  .ship-item.selected { border-color: var(--cyan); background: rgba(0,212,255,0.08); box-shadow: var(--glow-cyan); }
+  .ship-item.placed { opacity: 0.35; cursor: not-allowed; }
+  .ship-name { font-size: 0.7rem; color: var(--text-bright); }
+  .ship-size-bar {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .ship-block {
+    width: 8px; height: 8px;
+    background: var(--ship);
+    border-radius: 1px;
+  }
+  .ship-item.selected .ship-block { background: var(--cyan); }
+
+  /* Orientation toggle */
+  .orientation-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .orient-btn {
+    flex: 1;
+    padding: 7px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+  }
+  .orient-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,0.08); }
+  .orient-btn:hover:not(.active) { border-color: var(--steel); }
+
+  /* Stats */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(26,58,92,0.4);
+    font-size: 0.65rem;
+  }
+  .stat-label { color: var(--text); opacity: 0.6; }
+  .stat-val { color: var(--text-bright); font-weight: 700; }
+  .stat-val.hit { color: var(--hit); }
+  .stat-val.miss { color: var(--cyan-dim); }
+  .stat-val.destroyed { color: var(--destroyed); }
+
+  /* ===== CENTER PANEL ===== */
+  .center-panel { grid-column: 2; display: flex; flex-direction: column; gap: 10px; }
+
+  /* Boards container */
+  .boards-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .board-section { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .board-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    opacity: 0.7;
+  }
+  .board-label.p1 { color: var(--cyan); }
+  .board-label.p2 { color: var(--gold); }
+
+  /* Grid */
+  .grid-wrapper {
+    position: relative;
+    user-select: none;
+  }
+  .grid-coords {
+    display: grid;
+  }
+  .coord-row { display: flex; align-items: center; }
+  .coord-label {
+    width: 18px;
+    font-size: 0.55rem;
+    color: var(--text);
+    opacity: 0.4;
+    text-align: center;
+    line-height: 1;
+  }
+  .col-labels {
+    display: flex;
+    margin-left: 18px;
+    margin-bottom: 2px;
+  }
+  .col-label {
+    font-size: 0.55rem;
+    color: var(--text);
+    opacity: 0.4;
+    text-align: center;
+    line-height: 1;
+  }
+
+  .board-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    border: 1px solid var(--border);
+    padding: 2px;
+    background: rgba(0,0,0,0.3);
+    border-radius: 3px;
+  }
+
+  .cell {
+    aspect-ratio: 1;
+    width: 100%;
+    border-radius: 2px;
+    cursor: default;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    position: relative;
+  }
+
+  .cell-empty { background: var(--empty); border: 1px solid rgba(14,77,110,0.3); }
+  .cell-ship { background: var(--ship); border: 1px solid rgba(42,100,150,0.8); }
+  .cell-hit {
+    background: var(--hit);
+    border: 1px solid #ff6666;
+    box-shadow: 0 0 6px rgba(255,68,68,0.5);
+  }
+  .cell-miss {
+    background: var(--miss);
+    border: 1px solid rgba(58,90,122,0.8);
+  }
+  .cell-preview { background: rgba(0,212,255,0.2) !important; border-color: var(--cyan) !important; }
+  .cell-preview-invalid { background: rgba(255,51,51,0.2) !important; border-color: var(--red) !important; }
+
+  .board-grid.attackable .cell-empty:hover,
+  .board-grid.attackable .cell-ship:hover {
+    cursor: crosshair;
+    filter: brightness(1.5);
+    border-color: var(--gold) !important;
+  }
+
+  .board-grid.placeable .cell-empty { cursor: pointer; }
+
+  /* Hit/miss icons */
+  .cell-hit::after { content: '✕'; color: rgba(255,255,255,0.9); font-size: 0.7rem; font-weight: bold; }
+  .cell-miss::after { content: '·'; color: rgba(180,220,255,0.6); font-size: 1rem; }
+
+  /* ===== RIGHT PANEL ===== */
+  .right-panel { grid-column: 3; }
+
+  /* Log */
+  .event-log {
+    height: 220px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 4px;
+    padding: 4px;
+  }
+  .event-log::-webkit-scrollbar { width: 4px; }
+  .event-log::-webkit-scrollbar-track { background: var(--navy); }
+  .event-log::-webkit-scrollbar-thumb { background: var(--steel); border-radius: 2px; }
+
+  .log-entry {
+    font-size: 0.62rem;
+    padding: 4px 6px;
+    border-radius: 2px;
+    border-left: 2px solid var(--border);
+    background: rgba(0,0,0,0.2);
+    animation: fadeIn 0.3s ease;
+  }
+  .log-entry.hit { border-color: var(--hit); color: #ff9999; }
+  .log-entry.miss { border-color: var(--miss); color: var(--text); }
+  .log-entry.destroy { border-color: var(--destroyed); color: var(--destroyed); }
+  .log-entry.place { border-color: var(--ship); color: #7ab8e0; }
+  .log-entry.system { border-color: var(--cyan-dim); color: var(--cyan); }
+  .log-entry.win { border-color: var(--gold); color: var(--gold); font-weight: 700; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* AI panel */
+  .ai-section { margin-top: 12px; }
+  .ai-btns { display: flex; flex-direction: column; gap: 5px; }
+  .ai-btn {
+    padding: 7px 12px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ai-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .ai-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .ai-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .ai-dot.random { background: #ff6b6b; }
+  .ai-dot.center { background: #4ecdc4; }
+  .ai-dot.sweep { background: #a8e6cf; }
+
+  /* ===== BUTTONS ===== */
+  .btn {
+    padding: 9px 18px;
+    background: transparent;
+    border: 1px solid var(--cyan);
+    border-radius: 3px;
+    color: var(--cyan);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+  }
+  .btn:hover:not(:disabled) {
+    background: rgba(0,212,255,0.1);
+    box-shadow: var(--glow-cyan);
+  }
+  .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn.danger { border-color: var(--red); color: var(--red); }
+  .btn.danger:hover { background: rgba(255,51,51,0.1); }
+  .btn.success { border-color: var(--green); color: var(--green); }
+  .btn.success:hover { background: rgba(0,255,136,0.1); }
+  .btn.gold { border-color: var(--gold); color: var(--gold); }
+  .btn.gold:hover { background: rgba(245,197,24,0.1); box-shadow: var(--glow-gold); }
+
+  .btn-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  /* ===== MODAL / OVERLAY ===== */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,20,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+  }
+  .overlay.hidden { display: none; }
+
+  .modal {
+    background: var(--navy-mid);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 30px 36px;
+    max-width: 440px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(0,0,0,0.8);
+    animation: modalIn 0.3s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.93); } to { opacity: 1; transform: scale(1); } }
+
+  .modal-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    margin-bottom: 8px;
+  }
+  .modal-title.win { color: var(--gold); text-shadow: var(--glow-gold); }
+  .modal-title.system { color: var(--cyan); text-shadow: var(--glow-cyan); }
+  .modal-body { font-size: 0.75rem; color: var(--text); margin-bottom: 20px; line-height: 1.7; }
+  .modal-stats {
+    background: var(--navy-light);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    text-align: left;
+  }
+  .modal-stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(26,58,92,0.4);
+  }
+  .modal-stat-row:last-child { border-bottom: none; }
+
+  /* ===== STATUS BAR ===== */
+  .status-bar {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 14px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 0.62rem;
+  }
+  .status-msg {
+    flex: 1;
+    color: var(--text-bright);
+  }
+  .status-msg.error { color: var(--red); }
+  .status-msg.success { color: var(--green); }
+  .status-phase {
+    color: var(--cyan);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+  }
+  .server-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.6rem;
+    opacity: 0.7;
+  }
+  .server-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 4px var(--green);
+    animation: blink 2s infinite;
+  }
+  .server-dot.offline { background: var(--red); box-shadow: 0 0 4px var(--red); animation: none; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* ===== SHIP HEALTH DISPLAY ===== */
+  .health-section { margin-top: 10px; }
+  .health-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 0.6rem;
+  }
+  .health-name { width: 74px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .health-bar-wrap { flex: 1; height: 6px; background: var(--navy); border-radius: 2px; overflow: hidden; }
+  .health-bar { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.4s; }
+  .health-bar.low { background: var(--hit); }
+  .health-bar.mid { background: var(--gold); }
+  .health-item.dead .health-name { opacity: 0.35; text-decoration: line-through; }
+  .health-item.dead .health-bar { background: var(--miss); width: 0% !important; }
+
+  /* Radar section */
+  .radar-section { margin-top: 10px; }
+  .radar-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .radar-input {
+    width: 52px;
+    padding: 5px 8px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-bright);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    text-align: center;
+  }
+  .radar-result {
+    font-size: 0.62rem;
+    margin-top: 6px;
+    padding: 5px 8px;
+    background: var(--navy-light);
+    border-radius: 3px;
+    min-height: 24px;
+  }
+  .radar-result.detected { color: var(--red); border: 1px solid rgba(255,51,51,0.3); }
+  .radar-result.clear { color: var(--green); border: 1px solid rgba(0,255,136,0.2); }
+  .radar-charge { font-size:0.6rem; margin-bottom:4px; }
+  .radar-charge.used { opacity:0.4; text-decoration: line-through; }
+
+  /* Shop */
+  .shop-overlay { position:fixed; inset:0; background:rgba(0,10,26,0.92); display:flex; align-items:center; justify-content:center; z-index:200; }
+  .shop-overlay.hidden { display:none; }
+  .shop-box { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:20px; width:360px; max-height:90vh; overflow-y:auto; }
+  .shop-title { font-size:1rem; font-weight:700; color:var(--cyan); text-shadow:var(--glow-cyan); margin-bottom:4px; }
+  .shop-budget { font-size:0.7rem; margin-bottom:12px; }
+  .shop-budget span { color:var(--gold); font-weight:700; }
+  .shop-item { display:flex; align-items:center; gap:8px; margin-bottom:8px; border:1px solid var(--border); border-radius:4px; padding:7px 10px; }
+  .shop-item-name { flex:1; font-size:0.7rem; font-weight:600; }
+  .shop-item-meta { font-size:0.6rem; opacity:0.6; }
+  .shop-item-cost { font-size:0.7rem; color:var(--gold); min-width:40px; text-align:right; }
+  .shop-qty { width:36px; background:var(--navy); border:1px solid var(--border); color:var(--text); border-radius:3px; padding:2px 4px; font-size:0.7rem; text-align:center; }
+  .shop-remaining { font-size:0.75rem; margin:10px 0; }
+  .shop-remaining span { color:var(--gold); font-weight:700; }
+  .shop-remaining.over span { color:var(--red); }
+
+  /* Profiles */
+  .profile-row { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
+  .profile-input { flex:1; background:var(--navy); border:1px solid var(--border); color:var(--text); border-radius:3px; padding:3px 6px; font-size:0.65rem; }
+  .profile-stat { font-size:0.6rem; opacity:0.7; }
+  .profile-stat span { color:var(--cyan); }
+
+  /* Achievements */
+  .achievement { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:4px; margin-top:6px; background:rgba(255,215,0,0.08); border:1px solid rgba(255,215,0,0.25); }
+  .achievement-icon { font-size:1.2rem; }
+  .achievement-name { font-size:0.75rem; font-weight:700; color:var(--gold); }
+  .achievement-desc { font-size:0.6rem; opacity:0.7; }
+
+  /* Winner screen overlay specifics */
+  .trophy { font-size: 3rem; margin-bottom: 12px; animation: float 2s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid var(--border);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto;
+    }
+    .left-panel, .right-panel { grid-column: 1; }
+    .center-panel { grid-column: 1; }
+    .phase-bar { grid-column: 1; }
+    .status-bar { grid-column: 1; }
+    .boards-container { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* Config section */
+  .config-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 0.65rem;
+  }
+  .config-label { color: var(--text); opacity: 0.7; }
+  .config-input {
+    width: 120px;
+    padding: 5px 8px;
+    background: var(--navy-light);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text-bright);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+  }
+  .config-input:focus { outline: none; border-color: var(--cyan-dim); }
+  select.config-input option { background: var(--navy-mid); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚓ BATTLESHIP</h1>
+  <div class="subtitle">Naval Command Interface — CPSC 3720</div>
+</header>
+
+<div class="app">
+
+  <!-- PHASE BAR -->
+  <div class="phase-bar" id="phaseBar">
+    <div class="phase-step active" id="step1">
+      <div class="phase-num">1</div><span>P1 PLACING</span>
+    </div>
+    <div class="phase-arrow">›</div>
+    <div class="phase-step" id="step2">
+      <div class="phase-num">2</div><span>P2 PLACING</span>
+    </div>
+    <div class="phase-arrow">›</div>
+    <div class="phase-step" id="step3">
+      <div class="phase-num">3</div><span>BATTLE</span>
+    </div>
+    <div class="phase-arrow">›</div>
+    <div class="phase-step" id="step4">
+      <div class="phase-num">4</div><span>GAME OVER</span>
+    </div>
+  </div>
+
+  <!-- LEFT PANEL -->
+  <div class="panel left-panel">
+    <div class="panel-title">🎯 Command</div>
+
+    <!-- Server config -->
+    <div class="config-row">
+      <span class="config-label">SERVER</span>
+      <input class="config-input" id="serverHost" value="http://localhost:8080/api" placeholder="http://localhost:8080/api">
+    </div>
+
+    <!-- Turn indicator -->
+    <div class="turn-indicator">
+      <div class="turn-label">CURRENT TURN</div>
+      <div class="turn-player p1" id="turnDisplay">PLAYER 1</div>
+    </div>
+
+    <!-- Player profiles -->
+    <div id="profileSection">
+      <div class="panel-title" style="margin-top:10px;">👤 Players</div>
+      <div class="profile-row">
+        <span style="font-size:0.6rem;width:22px;opacity:0.6;">P1</span>
+        <input class="profile-input" id="p1Name" placeholder="Player 1 name" value="Player1">
+        <div class="profile-stat" id="p1Record">W:<span>0</span> L:<span>0</span></div>
+      </div>
+      <div class="profile-row">
+        <span style="font-size:0.6rem;width:22px;opacity:0.6;">P2</span>
+        <input class="profile-input" id="p2Name" placeholder="Player 2 name" value="Player2">
+        <div class="profile-stat" id="p2Record">W:<span>0</span> L:<span>0</span></div>
+      </div>
+    </div>
+
+    <!-- Mode select (only before game starts) -->
+    <div id="modeSection">
+      <div class="config-row" style="margin-bottom:6px;">
+        <span class="config-label">GAME MODE</span>
+        <select class="config-input" id="gameModeSelect">
+          <option value="hotseat">Hot Seat (2 Human)</option>
+          <option value="ai">Human vs AI</option>
+        </select>
+      </div>
+      <div id="aiTypeRow" class="config-row" style="display:none;">
+        <span class="config-label">AI TYPE</span>
+        <select class="config-input" id="aiTypeSelect">
+          <option value="random">Random</option>
+          <option value="center">Center</option>
+          <option value="sweep">Sweep</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Ship placement -->
+    <div id="placementSection">
+      <div class="panel-title" style="margin-top:10px;">🚢 Fleet</div>
+      <div class="ship-list" id="shipList"></div>
+      <div class="orientation-row">
+        <button class="orient-btn active" id="orientH" onclick="setOrientation('H')">→ Horizontal</button>
+        <button class="orient-btn" id="orientV" onclick="setOrientation('V')">↓ Vertical</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="startBattleBtn" onclick="startBattle()" disabled>▶ Start Battle</button>
+        <button class="btn danger" onclick="clearFleet()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div style="margin-top:12px;">
+      <div class="panel-title">📊 Stats</div>
+      <div class="stat-row"><span class="stat-label">Shots fired</span><span class="stat-val" id="statShots">0</span></div>
+      <div class="stat-row"><span class="stat-label">P1 ships lost</span><span class="stat-val destroyed" id="statP1Dest">0</span></div>
+      <div class="stat-row"><span class="stat-label">P2 ships lost</span><span class="stat-val destroyed" id="statP2Dest">0</span></div>
+      <div class="stat-row"><span class="stat-label">P1 ships placed</span><span class="stat-val" id="statP1Ships">0</span></div>
+      <div class="stat-row"><span class="stat-label">P2 ships placed</span><span class="stat-val" id="statP2Ships">0</span></div>
+    </div>
+
+    <!-- Radar scan (additional feature) -->
+    <div class="radar-section">
+      <div class="panel-title" style="margin-top:10px;">📡 Radar Scan</div>
+      <div style="font-size:0.6rem; opacity:0.6; margin-bottom:4px;">Scan 3×3 zone on opponent board</div>
+      <div class="radar-charge" id="p1RadarCharge">P1 charge: ⚡ Ready</div>
+      <div class="radar-charge" id="p2RadarCharge">P2 charge: ⚡ Ready</div>
+      <div class="radar-row">
+        <input class="radar-input" id="radarRow" type="number" min="0" max="4" placeholder="Row" value="2">
+        <input class="radar-input" id="radarCol" type="number" min="0" max="4" placeholder="Col" value="2">
+        <button class="btn" style="padding:5px 10px; font-size:0.55rem;" onclick="doRadar()">SCAN</button>
+      </div>
+      <div class="radar-result" id="radarResult" style="color:var(--text); opacity:0.5;">— ready —</div>
+    </div>
+  </div>
+
+  <!-- CENTER PANEL -->
+  <div class="center-panel">
+
+    <div class="boards-container">
+      <!-- Player 1 Board -->
+      <div class="board-section">
+        <div class="board-label p1" id="label1">PLAYER 1 — YOUR FLEET</div>
+        <div class="grid-wrapper">
+          <div class="col-labels" id="colLabels1"></div>
+          <div id="boardRows1"></div>
+        </div>
+        <!-- P1 ship health -->
+        <div class="health-section" id="healthP1" style="width:100%;"></div>
+      </div>
+
+      <!-- Player 2 Board -->
+      <div class="board-section">
+        <div class="board-label p2" id="label2">PLAYER 2 — TARGET GRID</div>
+        <div class="grid-wrapper">
+          <div class="col-labels" id="colLabels2"></div>
+          <div id="boardRows2"></div>
+        </div>
+        <!-- P2 ship health -->
+        <div class="health-section" id="healthP2" style="width:100%;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel right-panel">
+    <div class="panel-title">📜 Combat Log</div>
+    <div class="event-log" id="eventLog">
+      <div class="log-entry system">System online. Awaiting commands.</div>
+    </div>
+
+    <!-- AI controls -->
+    <div class="ai-section">
+      <div class="panel-title" style="margin-top:10px;">🤖 AI Opponents</div>
+      <div style="font-size:0.6rem; opacity:0.6; margin-bottom:8px;">Request AI shot for current turn</div>
+      <div class="ai-btns">
+        <button class="ai-btn" id="aiRandomBtn" onclick="getAiShot('random')" disabled>
+          <div class="ai-dot random"></div> Random AI — Fires at random cell
+        </button>
+        <button class="ai-btn" id="aiCenterBtn" onclick="getAiShot('center')" disabled>
+          <div class="ai-dot center"></div> Center AI — Works inward
+        </button>
+        <button class="ai-btn" id="aiSweepBtn" onclick="getAiShot('sweep')" disabled>
+          <div class="ai-dot sweep"></div> Sweep AI — Systematic sweep
+        </button>
+      </div>
+    </div>
+
+    <!-- Reset -->
+    <div style="margin-top:14px;">
+      <button class="btn danger" style="width:100%;" onclick="confirmReset()">↺ Reset Game</button>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <div class="server-status">
+      <div class="server-dot" id="serverDot"></div>
+      <span id="serverStatusTxt">CONNECTING</span>
+    </div>
+    <div class="status-msg" id="statusMsg">Loading game state...</div>
+    <div class="status-phase" id="statusPhase">IDLE</div>
+  </div>
+
+</div>
+
+<!-- WINNER MODAL -->
+<div class="overlay hidden" id="winnerOverlay">
+  <div class="modal">
+    <div class="trophy" id="winnerTrophy">🏆</div>
+    <div class="modal-title win" id="winnerTitle">VICTORY!</div>
+    <div class="modal-body" id="winnerBody">Player 1 wins!</div>
+    <div class="modal-stats" id="winnerStats"></div>
+    <div id="winnerAchievements"></div>
+    <button class="btn gold" onclick="confirmReset()" style="width:100%;margin-top:10px;">▶ Play Again</button>
+  </div>
+</div>
+
+<!-- RESET CONFIRM MODAL -->
+<div class="overlay hidden" id="resetOverlay">
+  <div class="modal">
+    <div class="modal-title system">RESET GAME?</div>
+    <div class="modal-body">All ships will be removed and the game will restart from the beginning.</div>
+    <div class="btn-row" style="justify-content:center;">
+      <button class="btn danger" onclick="doReset()">Confirm Reset</button>
+      <button class="btn" onclick="closeModal('resetOverlay')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- SHOP MODAL -->
+<div class="shop-overlay hidden" id="shopOverlay">
+  <div class="shop-box">
+    <div class="shop-title">⚓ Ship Shop</div>
+    <div id="shopPlayerLabel" style="font-size:0.65rem;margin-bottom:8px;opacity:0.7;">Player 1 — build your fleet</div>
+    <div class="shop-budget">Budget: <span id="shopBudgetDisplay">20</span> pts remaining</div>
+    <div id="shopCatalogItems"></div>
+    <div class="shop-remaining" id="shopRemaining">Spent: <span id="shopSpentDisplay">0</span> / 20 pts</div>
+    <div style="font-size:0.6rem;opacity:0.5;margin-bottom:10px;">You must spend at least 1 point. Leftover points are forfeit.</div>
+    <div class="btn-row">
+      <button class="btn" id="shopConfirmBtn" onclick="confirmShop()">✔ Confirm Fleet</button>
+      <button class="btn danger" onclick="resetShopQty()">↺ Clear</button>
+    </div>
+    <div id="shopError" style="color:var(--red);font-size:0.65rem;margin-top:8px;min-height:16px;"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const SHIPS = [
+  { name: 'Carrier',    size: 5 },
+  { name: 'Battleship', size: 4 },
+  { name: 'Cruiser',    size: 3 },
+  { name: 'Submarine',  size: 3 },
+  { name: 'Destroyer',  size: 2 },
+];
+const ROWS = 5, COLS = 5;
+const ROW_LABELS = ['A','B','C','D','E'];
+const COL_LABELS = ['1','2','3','4','5'];
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  phase: 'P1_PLACING', // P1_PLACING | P2_PLACING | BATTLE | GAME_OVER
+  currentPlayer: 1,
+  placingPlayer: 1,
+  selectedShip: null,
+  orientation: 'H',
+  placedP1: new Set(),
+  placedP2: new Set(),
+  gameState: null,
+  gameMode: 'hotseat', // hotseat | ai
+  aiType: 'random',
+  hoverCells: [],
+  // Shop: custom fleets per player (null = use default SHIPS)
+  fleetP1: null,
+  fleetP2: null,
+  shopForPlayer: 1,
+  shopCatalog: null,
+  // Radar charges
+  p1RadarUsed: false,
+  p2RadarUsed: false,
+};
+
+// ============================================================
+// API HELPERS
+// ============================================================
+function getBase() { return document.getElementById('serverHost').value.trim(); }
+
+async function api(method, path, body = null) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const r = await fetch(getBase() + path, opts);
+    const data = await r.json();
+    // Only update server status for core game endpoints
+    if (path.startsWith('/game/') || path.startsWith('/ai/')) {
+      setServerOnline(true);
+    }
+    return data;
+  } catch (e) {
+    if (path.startsWith('/game/') || path.startsWith('/ai/')) {
+      setServerOnline(false);
+    }
+    throw e;
+  }
+}
+
+function setServerOnline(online) {
+  document.getElementById('serverDot').className = 'server-dot' + (online ? '' : ' offline');
+  document.getElementById('serverStatusTxt').textContent = online ? 'SERVER ONLINE' : 'SERVER OFFLINE';
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+window.addEventListener('load', () => {
+  renderShipList();
+  buildBoards();
+  buildColLabels();
+  setupModeSelect();
+  loadProfiles();
+  // Wait for first successful server ping before opening shop
+  waitForServerThenShop();
+  setInterval(loadGameState, 3000);
+});
+
+async function waitForServerThenShop() {
+  // Try up to 10 times (5 seconds) to reach the server
+  for (let i = 0; i < 10; i++) {
+    try {
+      await loadGameState();
+      openShop(1);
+      return;
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, 500));
+  }
+  // Server not reachable — still open shop (will fall back to defaults)
+  openShop(1);
+}
+
+function setupModeSelect() {
+  document.getElementById('gameModeSelect').addEventListener('change', e => {
+    state.gameMode = e.target.value;
+    document.getElementById('aiTypeRow').style.display = e.target.value === 'ai' ? 'flex' : 'none';
+  });
+  document.getElementById('aiTypeSelect').addEventListener('change', e => {
+    state.aiType = e.target.value;
+  });
+}
+
+// ============================================================
+// BOARD BUILDING
+// ============================================================
+function buildColLabels() {
+  for (const id of ['colLabels1','colLabels2']) {
+    const el = document.getElementById(id);
+    el.innerHTML = '<div style="width:18px;"></div>' +
+      COL_LABELS.map(c => `<div class="col-label" style="flex:1;text-align:center;">${c}</div>`).join('');
+  }
+}
+
+function buildBoards() {
+  buildBoard('boardRows1', 1);
+  buildBoard('boardRows2', 2);
+}
+
+function buildBoard(containerId, player) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  for (let r = 0; r < ROWS; r++) {
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'coord-row';
+    rowDiv.innerHTML = `<div class="coord-label">${ROW_LABELS[r]}</div>`;
+
+    const grid = document.createElement('div');
+    grid.className = 'board-grid';
+    grid.id = `grid${player}`;
+    // Cell size based on available space
+    grid.style.gridTemplateColumns = `repeat(${COLS}, minmax(28px, 44px))`;
+
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell cell-empty';
+      cell.id = `cell-${player}-${r}-${c}`;
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      cell.dataset.player = player;
+      cell.addEventListener('click', () => onCellClick(player, r, c));
+      cell.addEventListener('mouseenter', () => onCellHover(player, r, c));
+      cell.addEventListener('mouseleave', () => clearHover());
+      grid.appendChild(cell);
+    }
+
+    if (r === 0) rowDiv.appendChild(grid); // attach grid in first row placeholder
+    else rowDiv.appendChild(grid.cloneNode(false)); // won't work, need different approach
+
+    rowDiv.appendChild(grid);
+    container.appendChild(rowDiv);
+  }
+  // Rebuild properly
+  rebuildBoard(containerId, player);
+}
+
+function rebuildBoard(containerId, player) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+
+  const gridDiv = document.createElement('div');
+  gridDiv.style.display = 'flex';
+  gridDiv.style.flexDirection = 'column';
+  gridDiv.style.gap = '0';
+
+  for (let r = 0; r < ROWS; r++) {
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'coord-row';
+    rowDiv.innerHTML = `<div class="coord-label">${ROW_LABELS[r]}</div>`;
+
+    const rowCells = document.createElement('div');
+    rowCells.style.display = 'grid';
+    rowCells.style.gridTemplateColumns = `repeat(${COLS}, minmax(28px, 44px))`;
+    rowCells.style.gap = '2px';
+
+    for (let c = 0; c < COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell cell-empty';
+      cell.id = `cell-${player}-${r}-${c}`;
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      cell.dataset.player = player;
+      cell.addEventListener('click', () => onCellClick(player, r, c));
+      cell.addEventListener('mouseenter', () => onCellHover(player, r, c));
+      cell.addEventListener('mouseleave', () => clearHover());
+      rowCells.appendChild(cell);
+    }
+    rowDiv.appendChild(rowCells);
+    gridDiv.appendChild(rowDiv);
+  }
+  container.appendChild(gridDiv);
+}
+
+// ============================================================
+// RENDER SHIP LIST
+// ============================================================
+function getActiveFleet() {
+  if (state.phase === 'P1_PLACING') return state.fleetP1 || SHIPS;
+  if (state.phase === 'P2_PLACING') return state.fleetP2 || SHIPS;
+  return SHIPS;
+}
+
+function renderShipList() {
+  const list = document.getElementById('shipList');
+  const currentPlaced = state.phase === 'P1_PLACING' ? state.placedP1 : state.placedP2;
+  const fleet = getActiveFleet();
+  list.innerHTML = fleet.map(s => {
+    const placed = currentPlaced.has(s.name);
+    const selected = state.selectedShip?.name === s.name && !placed;
+    return `<div class="ship-item ${placed?'placed':''} ${selected?'selected':''}"
+       onclick="${placed ? '' : `selectShip('${s.name}', ${s.size})`}">
+      <span class="ship-name">${s.name}</span>
+      <div class="ship-size-bar">${Array(s.size).fill('<div class="ship-block"></div>').join('')}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectShip(name, size) {
+  if (state.phase !== 'P1_PLACING' && state.phase !== 'P2_PLACING') return;
+  state.selectedShip = { name, size };
+  renderShipList();
+  setStatus(`Selected: ${name} (size ${size}) — click a cell to place`, 'normal');
+}
+
+function setOrientation(o) {
+  state.orientation = o;
+  document.getElementById('orientH').className = 'orient-btn' + (o==='H'?' active':'');
+  document.getElementById('orientV').className = 'orient-btn' + (o==='V'?' active':'');
+}
+
+// ============================================================
+// HOVER PREVIEW
+// ============================================================
+function onCellHover(player, row, col) {
+  clearHover();
+  const placingPlayer = state.phase === 'P1_PLACING' ? 1 : 2;
+  if ((state.phase === 'P1_PLACING' || state.phase === 'P2_PLACING') && player === placingPlayer && state.selectedShip) {
+    previewShip(player, row, col);
+  }
+}
+
+function previewShip(player, row, col) {
+  if (!state.selectedShip) return;
+  const size = state.selectedShip.size;
+  let valid = true;
+  const cells = [];
+  for (let i = 0; i < size; i++) {
+    const r = state.orientation === 'V' ? row + i : row;
+    const c = state.orientation === 'H' ? col + i : col;
+    if (r >= ROWS || c >= COLS) { valid = false; break; }
+    const el = document.getElementById(`cell-${player}-${r}-${c}`);
+    if (!el) { valid = false; break; }
+    if (el.classList.contains('cell-ship')) { valid = false; }
+    cells.push(el);
+  }
+  cells.forEach(el => {
+    el.classList.add(valid ? 'cell-preview' : 'cell-preview-invalid');
+    state.hoverCells.push(el);
+  });
+}
+
+function clearHover() {
+  state.hoverCells.forEach(el => {
+    el.classList.remove('cell-preview', 'cell-preview-invalid');
+  });
+  state.hoverCells = [];
+}
+
+// ============================================================
+// CELL CLICK HANDLER
+// ============================================================
+async function onCellClick(player, row, col) {
+  if (state.phase === 'P1_PLACING' && player === 1) {
+    await placeShipAction(1, row, col);
+  } else if (state.phase === 'P2_PLACING' && player === 2) {
+    await placeShipAction(2, row, col);
+  } else if (state.phase === 'BATTLE') {
+    const attacker = state.currentPlayer;
+    const defender = attacker === 1 ? 2 : 1;
+    // In battle: player clicks on opponent's board
+    if (player === defender) {
+      await fireShotAction(attacker, defender, row, col);
+    }
+  }
+}
+
+// ============================================================
+// PLACE SHIP
+// ============================================================
+async function placeShipAction(player, row, col) {
+  if (!state.selectedShip) {
+    setStatus('Select a ship first!', 'error');
+    return;
+  }
+  const placed = player === 1 ? state.placedP1 : state.placedP2;
+  if (placed.has(state.selectedShip.name)) {
+    setStatus('That ship is already placed!', 'error');
+    return;
+  }
+  try {
+    const result = await api('POST', '/game/place', {
+      player,
+      shipName: state.selectedShip.name,
+      row,
+      col,
+      orientation: state.orientation
+    });
+    if (result.status === 'ok') {
+      placed.add(state.selectedShip.name);
+      addLog(`P${player} placed ${state.selectedShip.name} at ${ROW_LABELS[row]}${COL_LABELS[col]}`, 'place');
+      setStatus(`${state.selectedShip.name} placed!`, 'success');
+      state.selectedShip = null;
+      renderShipList();
+      await loadGameState();
+      checkPlacementDone(player, placed);
+    } else {
+      setStatus(result.message || 'Placement failed', 'error');
+    }
+  } catch(e) {
+    setStatus('Server error — is the server running?', 'error');
+  }
+}
+
+function checkPlacementDone(player, placed) {
+  const fleet = player === 1 ? (state.fleetP1 || SHIPS) : (state.fleetP2 || SHIPS);
+  if (placed.size === fleet.length) {
+    if (player === 1) {
+      if (state.gameMode === 'ai') {
+        state.phase = 'P2_PLACING';
+        updatePhaseUI();
+        autoPlaceAI();
+      } else {
+        // Open shop for P2 before they place
+        openShop(2);
+      }
+    } else {
+      state.phase = 'BATTLE';
+      state.currentPlayer = 1;
+      updatePhaseUI();
+      setStatus('Battle begins! Player 1 fires first. Click on Player 2\'s board.', 'normal');
+      addLog('All ships placed. Battle phase started!', 'system');
+      updateBoardInteractivity();
+      enableAIButtons(true);
+      document.getElementById('placementSection').style.display = 'none';
+    }
+  }
+}
+
+async function autoPlaceAI() {
+  addLog('AI placing ships...', 'system');
+  setStatus('AI placing ships...', 'normal');
+  const placements = [
+    { name:'Carrier',    row:0, col:0, orientation:'H' },
+    { name:'Battleship', row:1, col:1, orientation:'H' },
+    { name:'Cruiser',    row:2, col:0, orientation:'V' },
+    { name:'Submarine',  row:2, col:3, orientation:'V' },
+    { name:'Destroyer',  row:4, col:3, orientation:'H' },
+  ];
+  for (const p of placements) {
+    try {
+      const result = await api('POST', '/game/place', { player:2, shipName:p.name, row:p.row, col:p.col, orientation:p.orientation });
+      if (result.status === 'ok') state.placedP2.add(p.name);
+    } catch(e) { /* ignore */ }
+    await sleep(120);
+  }
+  await loadGameState();
+  state.phase = 'BATTLE';
+  state.currentPlayer = 1;
+  updatePhaseUI();
+  setStatus('AI fleet placed. Battle begins! Click on Player 2\'s board to fire.', 'normal');
+  addLog('AI fleet deployed. Battle phase started!', 'system');
+  updateBoardInteractivity();
+  enableAIButtons(true);
+  document.getElementById('placementSection').style.display = 'none';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// START BATTLE (manual trigger)
+// ============================================================
+async function startBattle() {
+  const placed = state.phase === 'P1_PLACING' ? state.placedP1 : state.placedP2;
+  if (placed.size < getActiveFleet().length) {
+    setStatus('Place all ships before starting battle!', 'error');
+    return;
+  }
+  checkPlacementDone(state.phase === 'P1_PLACING' ? 1 : 2, placed);
+}
+
+// ============================================================
+// FIRE SHOT
+// ============================================================
+async function fireShotAction(attacker, defender, row, col) {
+  if (state.phase !== 'BATTLE') return;
+  try {
+    const result = await api('POST', '/game/fire', { attacker, defender, row, col });
+    if (result.status === 'ok') {
+      const msg = result.message || '';
+      let logType = 'miss';
+      if (msg.toLowerCase().includes('destroyed')) logType = 'destroy';
+      else if (msg.toLowerCase().includes('hit')) logType = 'hit';
+      addLog(`P${attacker} fires at ${ROW_LABELS[row]}${COL_LABELS[col]}: ${msg}`, logType);
+      setStatus(msg, logType === 'miss' ? 'normal' : 'success');
+      await loadGameState();
+      await checkWinner();
+
+      // In AI mode: after human fires, let AI fire back
+      if (state.phase === 'BATTLE' && state.gameMode === 'ai' && state.currentPlayer === 2) {
+        await sleep(600);
+        await getAiShot(state.aiType, true); // auto fire
+      }
+    } else {
+      setStatus(result.message || 'Fire failed', 'error');
+    }
+  } catch(e) {
+    setStatus('Server error during fire', 'error');
+  }
+}
+
+// ============================================================
+// AI SHOT
+// ============================================================
+async function getAiShot(aiType, auto = false) {
+  if (state.phase !== 'BATTLE') { setStatus('Not in battle phase!', 'error'); return; }
+  try {
+    const shotRes = await api('GET', `/ai/${aiType}/shot`);
+    const shotMsg = shotRes.message || '0,0';
+    // Parse "row,col" from message
+    const parts = shotMsg.split(',');
+    let row = parseInt(parts[0]);
+    let col = parseInt(parts[1]);
+    if (isNaN(row) || isNaN(col)) {
+      // fallback: random
+      row = Math.floor(Math.random() * 5);
+      col = Math.floor(Math.random() * 5);
+    }
+    row = Math.max(0, Math.min(4, row));
+    col = Math.max(0, Math.min(4, col));
+
+    const attacker = state.currentPlayer;
+    const defender = attacker === 1 ? 2 : 1;
+    addLog(`${aiType.toUpperCase()} AI suggests: ${ROW_LABELS[row]}${COL_LABELS[col]}`, 'system');
+
+    if (auto) {
+      await fireShotAction(attacker, defender, row, col);
+    } else {
+      setStatus(`${aiType} AI recommends firing at ${ROW_LABELS[row]}${COL_LABELS[col]} — click to confirm or fire manually`, 'normal');
+      // Highlight the suggested cell
+      clearHover();
+      const defenderBoard = attacker === 1 ? 2 : 1;
+      const el = document.getElementById(`cell-${defenderBoard}-${row}-${col}`);
+      if (el) { el.style.boxShadow = '0 0 12px var(--gold)'; state.hoverCells.push(el); }
+    }
+  } catch(e) {
+    setStatus('AI server error — is the AI server running?', 'error');
+  }
+}
+
+// ============================================================
+// LOAD GAME STATE
+// ============================================================
+async function loadGameState() {
+  try {
+    const gs = await api('GET', '/game/state');
+    state.gameState = gs;
+    renderGameState(gs);
+    updateStats();
+  } catch(e) {
+    // server offline handled in api()
+  }
+}
+
+function renderGameState(gs) {
+  if (!gs) return;
+
+  // Update currentPlayer from server
+  if (gs.currentPlayer && state.phase === 'BATTLE') {
+    state.currentPlayer = gs.currentPlayer;
+    updateTurnDisplay();
+  }
+
+  // Render boards
+  const b1 = gs.player1Board;
+  const b2 = gs.player2Board;
+
+  if (b1?.rows) renderBoardFromRows('1', b1.rows, gs.player1Ships, state.phase);
+  if (b2?.rows) renderBoardFromRows('2', b2.rows, gs.player2Ships, state.phase);
+
+  // Render ship health
+  if (gs.player1Ships) renderHealth('healthP1', gs.player1Ships, 1);
+  if (gs.player2Ships) renderHealth('healthP2', gs.player2Ships, 2);
+}
+
+function renderBoardFromRows(player, rows, ships, phase) {
+  for (let r = 0; r < ROWS; r++) {
+    const rowStr = rows[r] || '';
+    for (let c = 0; c < COLS; c++) {
+      const idx = c * 2;
+      const ch = rowStr[idx] || '~';
+      const el = document.getElementById(`cell-${player}-${r}-${c}`);
+      if (!el) continue;
+
+      el.className = 'cell';
+      if (ch === 'X') el.classList.add('cell-hit');
+      else if (ch === 'O') el.classList.add('cell-miss');
+      else if (ch === 'S') {
+        // Only show own ships; opponent ships are hidden until hit
+        if (player === '1') el.classList.add('cell-ship');
+        else if (phase === 'P2_PLACING' || (phase === 'BATTLE' && parseInt(player) !== state.currentPlayer)) {
+          el.classList.add('cell-empty'); // hide enemy ships
+        } else el.classList.add('cell-empty');
+      }
+      else el.classList.add('cell-empty');
+    }
+  }
+  updateBoardInteractivity();
+}
+
+function renderHealth(containerId, ships, player) {
+  if (!ships || ships.length === 0) return;
+  const container = document.getElementById(containerId);
+  container.innerHTML = ships.map(s => {
+    const pct = s.size > 0 ? Math.round((s.health / s.size) * 100) : 0;
+    const barClass = pct > 60 ? '' : pct > 30 ? 'mid' : 'low';
+    return `<div class="health-item ${s.destroyed ? 'dead' : ''}">
+      <div class="health-name" title="${s.name}">${s.name}</div>
+      <div class="health-bar-wrap">
+        <div class="health-bar ${barClass}" style="width:${s.destroyed?0:pct}%"></div>
+      </div>
+      <div style="font-size:0.55rem;width:24px;text-align:right;color:var(--text);opacity:0.6;">${s.destroyed?'☠':''+s.health}</div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// UPDATE UI
+// ============================================================
+function updateBoardInteractivity() {
+  const grid1 = document.querySelectorAll('#boardRows1 .cell');
+  const grid2 = document.querySelectorAll('#boardRows2 .cell');
+
+  // Clear all interaction classes
+  [...grid1, ...grid2].forEach(el => {
+    el.style.cursor = 'default';
+  });
+
+  if (state.phase === 'P1_PLACING') {
+    grid1.forEach(el => { el.style.cursor = 'pointer'; });
+  } else if (state.phase === 'P2_PLACING') {
+    grid2.forEach(el => { el.style.cursor = 'pointer'; });
+  } else if (state.phase === 'BATTLE') {
+    const defenderGrid = state.currentPlayer === 1 ? grid2 : grid1;
+    defenderGrid.forEach(el => {
+      if (el.classList.contains('cell-empty') || el.classList.contains('cell-ship')) {
+        el.style.cursor = 'crosshair';
+      }
+    });
+  }
+
+  // Start battle button
+  const placed = state.phase === 'P1_PLACING' ? state.placedP1 : state.placedP2;
+  document.getElementById('startBattleBtn').disabled = placed.size < getActiveFleet().length;
+}
+
+function updateTurnDisplay() {
+  const el = document.getElementById('turnDisplay');
+  const p = state.phase === 'BATTLE' ? state.currentPlayer : (state.phase === 'P1_PLACING' ? 1 : 2);
+  el.className = `turn-player p${p}`;
+  if (state.phase === 'P1_PLACING') el.textContent = 'PLAYER 1 — PLACE';
+  else if (state.phase === 'P2_PLACING') el.textContent = 'PLAYER 2 — PLACE';
+  else if (state.phase === 'BATTLE') el.textContent = `PLAYER ${p} — FIRE`;
+  else el.textContent = 'GAME OVER';
+}
+
+function updatePhaseUI() {
+  const steps = { P1_PLACING: 1, P2_PLACING: 2, BATTLE: 3, GAME_OVER: 4 };
+  const current = steps[state.phase] || 1;
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById(`step${i}`);
+    el.className = 'phase-step' + (i === current ? ' active' : i < current ? ' done' : '');
+  }
+  updateTurnDisplay();
+  updateBoardInteractivity();
+
+  // Board labels
+  if (state.phase === 'P1_PLACING') {
+    document.getElementById('label1').textContent = 'PLAYER 1 — PLACE YOUR FLEET';
+    document.getElementById('label2').textContent = 'PLAYER 2 — OPPONENT';
+  } else if (state.phase === 'P2_PLACING') {
+    document.getElementById('label1').textContent = 'PLAYER 1 — DEPLOYED';
+    document.getElementById('label2').textContent = 'PLAYER 2 — PLACE YOUR FLEET';
+    renderShipList(); // refresh for P2
+  } else if (state.phase === 'BATTLE') {
+    document.getElementById('label1').textContent = 'PLAYER 1 — YOUR FLEET';
+    document.getElementById('label2').textContent = 'PLAYER 2 — TARGET';
+  }
+}
+
+async function updateStats() {
+  try {
+    const stats = await api('GET', '/game/stats');
+    document.getElementById('statShots').textContent = stats.shotsFired ?? 0;
+    document.getElementById('statP1Dest').textContent = stats.player1ShipsDestroyed ?? 0;
+    document.getElementById('statP2Dest').textContent = stats.player2ShipsDestroyed ?? 0;
+    document.getElementById('statP1Ships').textContent = stats.player1ShipsPlaced ?? 0;
+    document.getElementById('statP2Ships').textContent = stats.player2ShipsPlaced ?? 0;
+  } catch(e) {}
+}
+
+// ============================================================
+// CHECK WINNER
+// ============================================================
+async function checkWinner() {
+  try {
+    const w = await api('GET', '/game/winner');
+    if (w.hasWinner) {
+      state.phase = 'GAME_OVER';
+      updatePhaseUI();
+      enableAIButtons(false);
+      showWinner(w.winner);
+    }
+  } catch(e) {}
+}
+
+async function showWinner(winner) {
+  const stats = await api('GET', '/game/stats').catch(() => null);
+  const achievements = await api('GET', `/game/achievements/${winner}`).catch(() => null);
+
+  document.getElementById('winnerTrophy').textContent = winner === 1 ? '🏆' : '🥇';
+  document.getElementById('winnerTitle').textContent = `PLAYER ${winner} WINS!`;
+
+  const p1n = document.getElementById('p1Name').value.trim() || 'Player 1';
+  const p2n = document.getElementById('p2Name').value.trim() || 'Player 2';
+  const winnerName = winner === 1 ? p1n : p2n;
+  const loserName  = winner === 1 ? p2n : p1n;
+  document.getElementById('winnerBody').textContent = `${winnerName} has destroyed all enemy ships!`;
+
+  if (stats) {
+    document.getElementById('winnerStats').innerHTML = `
+      <div class="modal-stat-row"><span>Total Shots Fired</span><span>${stats.shotsFired}</span></div>
+      <div class="modal-stat-row"><span>P1 Ships Destroyed</span><span>${stats.player1ShipsDestroyed}</span></div>
+      <div class="modal-stat-row"><span>P2 Ships Destroyed</span><span>${stats.player2ShipsDestroyed}</span></div>
+    `;
+  }
+
+  // Achievements
+  const achEl = document.getElementById('winnerAchievements');
+  achEl.innerHTML = '';
+  if (achievements) {
+    const earned = [];
+    if (achievements.hotShot)       earned.push({ icon:'🎯', name:'Hot Shot',       desc:`Won in ${achievements.rounds} shots (under 20)` });
+    if (achievements.perfectVictory) earned.push({ icon:'⭐', name:'Perfect Victory', desc:'Sank every single enemy ship' });
+    if (earned.length) {
+      achEl.innerHTML = '<div style="font-size:0.65rem;margin-top:10px;margin-bottom:4px;opacity:0.7;">ACHIEVEMENTS EARNED</div>' +
+        earned.map(a => `
+          <div class="achievement">
+            <div class="achievement-icon">${a.icon}</div>
+            <div>
+              <div class="achievement-name">${a.name}</div>
+              <div class="achievement-desc">${a.desc}</div>
+            </div>
+          </div>`).join('');
+    }
+  }
+
+  // Record win/loss to profiles
+  try { await api('POST', `/profiles/${encodeURIComponent(winnerName)}/win`); } catch(e) {}
+  try { await api('POST', `/profiles/${encodeURIComponent(loserName)}/loss`); } catch(e) {}
+  await loadProfiles();
+
+  addLog(`⚓ ${winnerName.toUpperCase()} WINS! All enemy ships sunk.`, 'win');
+  document.getElementById('winnerOverlay').classList.remove('hidden');
+}
+
+// ============================================================
+// RADAR SCAN
+// ============================================================
+async function doRadar() {
+  if (state.phase !== 'BATTLE') { setStatus('Radar only available during battle!', 'error'); return; }
+
+  const attacker = state.currentPlayer;
+  const chargeKey = attacker === 1 ? 'p1RadarUsed' : 'p2RadarUsed';
+  if (state[chargeKey]) {
+    setStatus(`Player ${attacker} has already used their radar charge!`, 'error');
+    return;
+  }
+
+  const centerRow = parseInt(document.getElementById('radarRow').value);
+  const centerCol = parseInt(document.getElementById('radarCol').value);
+  if (isNaN(centerRow) || isNaN(centerCol) || centerRow < 0 || centerRow > 4 || centerCol < 0 || centerCol > 4) {
+    setStatus('Radar coordinates out of range (0-4)', 'error');
+    return;
+  }
+
+  try {
+    const result = await api('POST', '/game/radar', { player: attacker, centerRow, centerCol });
+
+    if (result.message === 'Radar charge already used') {
+      state[chargeKey] = true;
+      updateRadarChargeUI();
+      setStatus(`Player ${attacker} radar already used!`, 'error');
+      return;
+    }
+
+    state[chargeKey] = true;
+    updateRadarChargeUI();
+
+    const resultEl = document.getElementById('radarResult');
+    const rowLabels = ['A','B','C','D','E'];
+    const colLabels = ['1','2','3','4','5'];
+    const zone = `${rowLabels[result.startRow]}${colLabels[result.startCol]}–${rowLabels[result.endRow]}${colLabels[result.endCol]}`;
+
+    if (result.detected) {
+      resultEl.className = 'radar-result detected';
+      resultEl.textContent = `⚠ CONTACT in zone ${zone}`;
+      addLog(`P${attacker} radar at ${rowLabels[centerRow]}${colLabels[centerCol]}: CONTACT`, 'system');
+      setStatus(`Radar: enemy ship detected in ${zone}!`, 'normal');
+    } else {
+      resultEl.className = 'radar-result clear';
+      resultEl.textContent = `✓ Zone ${zone} is clear`;
+      addLog(`P${attacker} radar at ${rowLabels[centerRow]}${colLabels[centerCol]}: clear`, 'system');
+      setStatus(`Radar: no ships in ${zone}`, 'normal');
+    }
+  } catch(e) {
+    setStatus('Radar scan failed — server error', 'error');
+  }
+}
+
+function updateRadarChargeUI() {
+  const p1El = document.getElementById('p1RadarCharge');
+  const p2El = document.getElementById('p2RadarCharge');
+  if (state.p1RadarUsed) { p1El.textContent = 'P1 charge: ✗ Used'; p1El.className = 'radar-charge used'; }
+  else { p1El.textContent = 'P1 charge: ⚡ Ready'; p1El.className = 'radar-charge'; }
+  if (state.p2RadarUsed) { p2El.textContent = 'P2 charge: ✗ Used'; p2El.className = 'radar-charge used'; }
+  else { p2El.textContent = 'P2 charge: ⚡ Ready'; p2El.className = 'radar-charge'; }
+}
+
+// ============================================================
+// RESET
+// ============================================================
+function confirmReset() {
+  closeModal('winnerOverlay');
+  document.getElementById('resetOverlay').classList.remove('hidden');
+}
+
+async function doReset() {
+  closeModal('resetOverlay');
+  try {
+    await api('POST', '/game/reset');
+    state.phase = 'P1_PLACING';
+    state.currentPlayer = 1;
+    state.selectedShip = null;
+    state.placedP1 = new Set();
+    state.placedP2 = new Set();
+    state.gameState = null;
+    state.hoverCells = [];
+    state.p1RadarUsed = false;
+    state.p2RadarUsed = false;
+    state.fleetP1 = null;
+    state.fleetP2 = null;
+    updateRadarChargeUI();
+    document.getElementById('placementSection').style.display = '';
+    renderShipList();
+    updatePhaseUI();
+    enableAIButtons(false);
+    clearEventLog();
+    addLog('Game reset. Player 1, place your fleet.', 'system');
+    setStatus('Game reset. Player 1: select a ship and place it on your board.', 'normal');
+    document.getElementById('radarResult').textContent = '— ready —';
+    document.getElementById('radarResult').className = 'radar-result';
+    document.getElementById('healthP1').innerHTML = '';
+    document.getElementById('healthP2').innerHTML = '';
+    await loadGameState();
+    // Open shop for P1 to pick their fleet
+    openShop(1);
+  } catch(e) {
+    setStatus('Reset failed — server error', 'error');
+  }
+}
+
+function clearFleet() {
+  // Cannot clear via API individually (no batch delete), but we can reset
+  confirmReset();
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function setStatus(msg, type = 'normal') {
+  const el = document.getElementById('statusMsg');
+  el.className = 'status-msg' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+  el.textContent = msg;
+  document.getElementById('statusPhase').textContent = state.phase.replace('_', ' ');
+}
+
+function addLog(msg, type = 'system') {
+  const log = document.getElementById('eventLog');
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  const time = new Date().toLocaleTimeString('en-CA', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  entry.textContent = `[${time}] ${msg}`;
+  log.insertBefore(entry, log.firstChild);
+  // Keep log trimmed
+  while (log.children.length > 60) log.removeChild(log.lastChild);
+}
+
+function clearEventLog() {
+  document.getElementById('eventLog').innerHTML = '';
+}
+
+function enableAIButtons(enabled) {
+  ['aiRandomBtn','aiCenterBtn','aiSweepBtn'].forEach(id => {
+    document.getElementById(id).disabled = !enabled;
+  });
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+// ============================================================
+// PROFILES
+// ============================================================
+async function loadProfiles() {
+  const p1Name = document.getElementById('p1Name').value.trim() || 'Player1';
+  const p2Name = document.getElementById('p2Name').value.trim() || 'Player2';
+
+  for (const [name, elId] of [[p1Name, 'p1Record'], [p2Name, 'p2Record']]) {
+    try {
+      // Ensure profile exists, then fetch it
+      await api('POST', '/profiles', { name });
+      const p = await api('GET', `/profiles/${encodeURIComponent(name)}`);
+      document.getElementById(elId).innerHTML = `W:<span>${p.wins}</span> L:<span>${p.losses}</span>`;
+    } catch(e) {
+      document.getElementById(elId).innerHTML = `W:<span>0</span> L:<span>0</span>`;
+    }
+  }
+}
+
+// ============================================================
+// SHIP SHOP
+// ============================================================
+async function openShop(playerNum) {
+  state.shopForPlayer = playerNum;
+  const playerLabel = playerNum === 1
+    ? (document.getElementById('p1Name').value.trim() || 'Player 1')
+    : (document.getElementById('p2Name').value.trim() || 'Player 2');
+
+  document.getElementById('shopPlayerLabel').textContent = `${playerLabel} — build your fleet (20 pts)`;
+  document.getElementById('shopError').textContent = '';
+
+  // Fetch catalog if not cached
+  if (!state.shopCatalog) {
+    try {
+      state.shopCatalog = await api('GET', '/shop/catalog');
+    } catch(e) {
+      // Server unreachable — skip shop and use defaults
+      onShopSkipped(playerNum);
+      return;
+    }
+  }
+
+  renderShopCatalog();
+  document.getElementById('shopOverlay').classList.remove('hidden');
+}
+
+function renderShopCatalog() {
+  const catalog = state.shopCatalog?.catalog || [];
+  const budget  = state.shopCatalog?.budget || 20;
+
+  const container = document.getElementById('shopCatalogItems');
+  container.innerHTML = catalog.map(item => `
+    <div class="shop-item">
+      <div>
+        <div class="shop-item-name">${item.name}</div>
+        <div class="shop-item-meta">Size: ${item.size} cells</div>
+      </div>
+      <div class="shop-item-cost">${item.cost} pts</div>
+      <input class="shop-qty" type="number" min="0" max="5" value="0"
+        id="shopQty_${item.name}" oninput="updateShopTotal()">
+    </div>`).join('');
+
+  updateShopTotal();
+}
+
+function updateShopTotal() {
+  const catalog = state.shopCatalog?.catalog || [];
+  const budget  = state.shopCatalog?.budget || 20;
+  let spent = 0;
+  for (const item of catalog) {
+    const qty = parseInt(document.getElementById(`shopQty_${item.name}`)?.value || '0') || 0;
+    spent += qty * item.cost;
+  }
+  const remaining = budget - spent;
+  const remEl = document.getElementById('shopRemaining');
+  document.getElementById('shopSpentDisplay').textContent = spent;
+  document.getElementById('shopBudgetDisplay').textContent = remaining;
+  remEl.className = 'shop-remaining' + (remaining < 0 ? ' over' : '');
+}
+
+function resetShopQty() {
+  const catalog = state.shopCatalog?.catalog || [];
+  for (const item of catalog) {
+    const el = document.getElementById(`shopQty_${item.name}`);
+    if (el) el.value = '0';
+  }
+  updateShopTotal();
+  document.getElementById('shopError').textContent = '';
+}
+
+async function confirmShop() {
+  const catalog = state.shopCatalog?.catalog || [];
+  const budget  = state.shopCatalog?.budget || 20;
+
+  const ships = [];
+  let spent = 0;
+  for (const item of catalog) {
+    const qty = parseInt(document.getElementById(`shopQty_${item.name}`)?.value || '0') || 0;
+    if (qty > 0) {
+      ships.push({ name: item.name, quantity: qty });
+      spent += qty * item.cost;
+    }
+  }
+
+  if (spent === 0) {
+    document.getElementById('shopError').textContent = 'Select at least one ship!';
+    return;
+  }
+  if (spent > budget) {
+    document.getElementById('shopError').textContent = `Over budget by ${spent - budget} pts!`;
+    return;
+  }
+
+  try {
+    const result = await api('POST', '/shop/buy', { ships, rows: 5, cols: 5 });
+    if (!result.success) {
+      document.getElementById('shopError').textContent = result.message || 'Purchase failed';
+      return;
+    }
+
+    // Build fleet array from response
+    const fleet = result.fleet.map(s => ({ name: s.name, size: s.size }));
+
+    if (state.shopForPlayer === 1) {
+      state.fleetP1 = fleet;
+    } else {
+      state.fleetP2 = fleet;
+    }
+
+    document.getElementById('shopOverlay').classList.add('hidden');
+    onShopDone(state.shopForPlayer);
+  } catch(e) {
+    document.getElementById('shopError').textContent = 'Server error — using default fleet';
+    document.getElementById('shopOverlay').classList.add('hidden');
+    onShopSkipped(state.shopForPlayer);
+  }
+}
+
+function onShopDone(playerNum) {
+  if (playerNum === 1) {
+    addLog(`P1 purchased custom fleet from shop.`, 'system');
+    setStatus('Player 1: place your ships on your board.', 'normal');
+  } else {
+    state.phase = 'P2_PLACING';
+    updatePhaseUI();
+    addLog(`P2 purchased custom fleet from shop.`, 'system');
+    setStatus('Player 2: place your ships on your board.', 'normal');
+    updateBoardInteractivity();
+  }
+  renderShipList();
+}
+
+function onShopSkipped(playerNum) {
+  // Use default SHIPS fleet
+  if (playerNum === 1) {
+    state.fleetP1 = null;
+  } else {
+    state.fleetP2 = null;
+    state.phase = 'P2_PLACING';
+    updatePhaseUI();
+    updateBoardInteractivity();
+  }
+  renderShipList();
+  setStatus(`Player ${playerNum}: place your ships.`, 'normal');
+}
+</script>
+</body>
+</html>
